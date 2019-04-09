@@ -1,0 +1,141 @@
+C51 COMPILER V9.52.0.0   MAIN                                                              04/02/2019 17:37:19 PAGE 1   
+
+
+C51 COMPILER V9.52.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN main.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE main.c OPTIMIZE(0,SPEED) BROWSE DEBUG OBJECTEXTEND TABS(2)
+
+line level    source
+
+   1          
+   2          #include "main.h"
+*** WARNING C323 IN LINE 1 OF FO-M3.h: newline expected, extra characters found
+*** WARNING C323 IN LINE 1 OF FO-M4.h: newline expected, extra characters found
+   3          
+   4          bit TI0_flag,ok;
+   5          sfr Reg    =   0xFF; 
+   6          int index;
+   7          
+   8          void initialisation(void){
+   9   1        //Devalidation du WatchDog
+  10   1        Reg = 0xDE;
+  11   1        Reg = 0xAD;
+  12   1        
+  13   1        //Crossbar!
+  14   1        XBR2 |= 0x40;// Enable crossbar
+  15   1        XBR1 |=0x80; // Enable SYSCLK
+  16   1        XBR0 |= 0x04;// TX routed P0.0 , RX routed P0.1;
+  17   1      
+  18   1        //Gestion des sorties
+  19   1        P0MDOUT |=0x01; //Port 0.0 Push pull
+  20   1        P0MDOUT |=0x04; //Port 0.2 Push pull
+  21   1        P1MDOUT |=0x40; //Port 1.6 Push Pull  
+  22   1        
+  23   1        //Interrupt
+  24   1        EA=1; //Enable all interrupt
+  25   1        EIE2 |= 0x20; // Enable interrupt 19 (Bouton 3.7)
+  26   1        ES0 = 1; // Enable interrupt 4 (UART0)
+  27   1      
+  28   1        //Appel fonctions de configuration
+  29   1        config_clock();
+  30   1        config_timer1();
+  31   1        config_UART();
+  32   1        //definition_param_test();
+  33   1        return;
+  34   1      }
+  35          
+  36          
+  37          void wait(int time){
+  38   1        unsigned int k,j;
+  39   1        for(k=0;k<3000;k++){
+  40   2          for(j=0;j<time;j++){
+  41   3          }
+  42   2        }
+  43   1        return;
+  44   1      }
+  45          
+  46          void config_clock(void){
+  47   1        unsigned int n;
+  48   1        OSCXCN = 0x67;// Config Extern Oscil
+  49   1        for(n=0;n<2;n++){
+  50   2          delay();
+  51   2        }
+  52   1        OSCICN |= 0x08; //Enable Extern Clock
+  53   1        return;
+C51 COMPILER V9.52.0.0   MAIN                                                              04/02/2019 17:37:19 PAGE 2   
+
+  54   1      }
+  55          
+  56          void config_timer1(void){
+  57   1         CKCON |= 0x10;  // On ne divise pas par 12
+  58   1         TH1 = 0xB8; // 184 debut timer1 --> 19200 baudrate
+  59   1         TMOD &= 0xaf; // T1M1
+  60   1         TMOD |= 0x20; //T1M0
+  61   1         TR1 = 1; // enable timer 1
+  62   1      }
+  63          
+  64          void config_UART(void){      //19200
+  65   1        SM00 = 0; // UART0 mode 1    
+  66   1        SM10 = 1;    // UART0 mode 1    
+  67   1        PCON |= 0x80; // baud rate divided by 2 disabled                    
+  68   1        REN0 = 1; // receive enable
+  69   1        RI0 = 0; // RECEIVE INTERRUPT FLAG
+  70   1      }
+  71          
+  72          
+  73          void serial0() interrupt 4{
+  74   1          unsigned char ch;
+  75   1          if(RI0){
+  76   2            ch=SBUF0;
+  77   2            if(ch!=0x0D){
+  78   3              Buffer[index++]=ch;
+  79   3            }
+  80   2            else{
+  81   3              compare_servo_H();
+  82   3            ok=1;
+  83   3            }
+  84   2            RI0=0;
+  85   2          }
+  86   1          else{
+  87   2            TI0=0;
+  88   2            TI0_flag=1;
+  89   2          }
+  90   1      }
+  91          
+  92          void main(void){
+  93   1        initialisation();
+  94   1        init_FO_M3();
+  95   1        init_FO_M4();
+*** WARNING C206 IN LINE 95 OF main.c: 'init_FO_M4': missing function-prototype
+  96   1        index=0;
+  97   1        TI0_flag=0;
+  98   1        ok=0;
+  99   1        temps = CDE_Servo_H("-00");
+ 100   1        while(1){
+ 101   2          if(ok==1){
+ 102   3            ok=0;
+ 103   3            index=0;
+ 104   3            if (running==1){
+ 105   4              wait(temps);
+ 106   4              arriver();
+ 107   4              running=0;
+ 108   4            }
+ 109   3          }
+ 110   2        }
+ 111   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+C51 COMPILER V9.52.0.0   MAIN                                                              04/02/2019 17:37:19 PAGE 3   
+
+   CODE SIZE        =    353    ----
+   CONSTANT SIZE    =      4    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     11    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      2    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  3 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,8 @@
+"STARTUP.obj",
+"FO-M3.obj",
+"FCT_03A.obj",
+"FO-M4.obj",
+"main.obj",
+"FCT_05A.obj" 
+TO "Test" 
+RAMSIZE(256) 

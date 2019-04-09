@@ -1,0 +1,89 @@
+C51 COMPILER V9.52.0.0   FO_M4                                                             04/02/2019 17:37:19 PAGE 1   
+
+
+C51 COMPILER V9.52.0.0, COMPILATION OF MODULE FO_M4
+OBJECT MODULE PLACED IN FO-M4.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE FO-M4.c OPTIMIZE(0,SPEED) BROWSE DEBUG OBJECTEXTEND TABS(2)
+
+line level    source
+
+   1          #include "FO-M4.h"
+*** WARNING C323 IN LINE 1 OF FO-M4.h: newline expected, extra characters found
+*** WARNING C323 IN LINE 1 OF FO-M3.h: newline expected, extra characters found
+   2          int distance_ultra=0;
+   3          
+   4          //WARNING change this!!
+   5          sbit Signal_Trig=P3^7;
+   6          sbit Echo =P0^1;
+   7          
+   8          
+   9          
+  10            void init_FO_M4(){
+  11   1          WDTCN = 0xDE;                 // Disable watchdog 
+  12   1          WDTCN = 0xAD;
+  13   1          OSCXCN = 0x67;                  // use external clock
+  14   1          OSCICN |= 0x08;                 //System clock = extern clock
+  15   1          XBR0 |= 0x08;
+  16   1          XBR1 |= 0x08;
+  17   1          XBR2 |= 0x40;
+  18   1          P0MDOUT |= 0x01;              // WARNING push-pull P0.0
+  19   1          P3MDOUT |=  0x80;             // WARNING push-pull P3.7
+  20   1          IE |= 0x02;
+  21   1          EA=1;
+  22   1          
+  23   1        }
+  24          
+  25          void Timer2_pulse(void)
+  26          {
+  27   1          ET2=1;
+  28   1          TL2=Pulse_10us;         //initial value
+  29   1          TH2=(Pulse_10us>>8);
+  30   1          RCAP2L=TL2;                    //reload value
+  31   1          RCAP2H=TH2;
+  32   1          EXEN2=0;                     //disable External trigger
+  33   1          CT2=0;                       //Mode Timer
+  34   1          CPRL2=0;                     //mode Reload
+  35   1          Signal_Trig=1;              //pulse on
+  36   1          TR2=1;                       //enable timer2
+  37   1      }
+  38          void Count_or_Capt(void) interrupt 5{
+  39   1            
+  40   1          int time=0;
+  41   1          if(TF2){
+  42   2              TF2=0;
+  43   2              TR2=0;                       //disable timer
+  44   2              Signal_Trig=0;              //pulse off
+  45   2              EXEN2=1;                     //enable External trigger
+  46   2              CPRL2=1;                     //mode capture
+  47   2              
+  48   2          }
+  49   1          else{
+  50   2              EXF2=0;
+  51   2              time =(10*RCAP2H + RCAP2L)/CLK;
+  52   2              distance_ultra=time/58;
+  53   2              TR2=0;
+C51 COMPILER V9.52.0.0   FO_M4                                                             04/02/2019 17:37:19 PAGE 2   
+
+  54   2          }
+  55   1      }
+  56          void Launch_Timer2(void) interrupt 2{
+  57   1        TR2=1;
+  58   1      }
+  59          unsigned int Ultrason_Dist(void){
+  60   1        Timer2_pulse();
+  61   1        return distance_ultra;
+  62   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    204    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      4    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  2 WARNING(S),  0 ERROR(S)

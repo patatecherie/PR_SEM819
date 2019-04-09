@@ -1,0 +1,334 @@
+C51 COMPILER V9.52.0.0   FCT_08B                                                           03/19/2019 16:32:48 PAGE 1   
+
+
+C51 COMPILER V9.52.0.0, COMPILATION OF MODULE FCT_08B
+OBJECT MODULE PLACED IN FCT_08B.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE FCT_08B.c BROWSE DEBUG OBJECTEXTEND TABS(2)
+
+line level    source
+
+   1           //------------------------------------------------------------------------------------
+   2          // FTC_08B.c
+   3          //------------------------------------------------------------------------------------
+   4          // DATE: 28/02/2019 -
+   5          //
+   6          // Target: C8051F02x
+   7          // Tool chain: KEIL Microvision 4
+   8          //
+   9          //  NOMS:APPRIOU Dimitri - BARD Christophe - BURGEVIN Valentin - GRELLIER Hugo
+  10          //  HONEGGER Joachim - LEMOINE Thomas - MONNERET Mathieu - MOUSSA Pierre
+  11          //
+  12          //------------------------------------------------------------------------------------
+  13          #include "c8051F020.h"
+  14          //------------------------------------------------------------------------------------
+  15          // Attribution des variables de sortie et initialisation de resigstres
+  16          //------------------------------------------------------------------------------------
+  17          sfr Reg    =   0xFF; 
+  18          sbit CDE = P1^6; // LED de test, affiche le signal de sortie CDE
+  19          sbit BP = P3^7; // Bouton 3.7 du 8051
+  20          //sbit CDE = PX^X; // Pin de sortie, signal carre 0-3.3V rapport cyclique variable
+  21           #define temps_clock 0x1000             // 27800 => 20ms //Definition de la variable 20ms
+  22          
+  23          // Definition variables
+  24          unsigned int compteur_cycle=0;
+  25          unsigned int led_on=0;
+  26          unsigned int led_off=0;
+  27          unsigned int cycle_haut=0;
+  28          unsigned int cycle_bas=0;
+  29          //unsigned int duree_allum;
+  30          //unsigned int duree_ext;
+  31          //unsigned int nb_allumage;
+  32          //unsigned int intensite;
+  33          unsigned int GO=0; // variable de déclenchement de la séquence
+  34          
+  35          //variables de commandes
+  36          unsigned int I = 100; //intensite
+  37          unsigned int D = 100; //duree
+  38          unsigned int E = 90;  //extinction
+  39          unsigned int N = 4; //nombre de repet
+  40          
+  41          // Prototypes des fonctions
+  42          void main(void);
+  43          void initialisation(void);
+  44          void config_clock(void);
+  45          void config_timer4(void);
+  46          void config_timer1(void);
+  47          void config_UART(void);
+  48          //void definition_param_test(void);
+  49          void delay(void);
+  50          void cycle(unsigned int,unsigned int,unsigned int,unsigned int);
+  51          void allumage(unsigned int);
+  52          int conversion_ASCII_UINT(char);
+  53          
+  54          void super_extinction(void); //interrupt 19
+  55          void timer_interrupt(void); //interrupt 16
+C51 COMPILER V9.52.0.0   FCT_08B                                                           03/19/2019 16:32:48 PAGE 2   
+
+  56          void interrupt_reception(void); //interrupt 4
+  57          
+  58          //------------------------------------------------------------------------------------
+  59          // MAIN Routine
+  60          //------------------------------------------------------------------------------------
+  61          
+  62          void main(){  
+  63   1        initialisation();
+  64   1        while(1){
+  65   2          if (GO == 1){
+  66   3            //T4CON |= 0x04; //Lancement du timer
+  67   3            cycle(I,D,E,N);
+  68   3            GO = 0;// RAZ
+  69   3          }
+  70   2        }
+  71   1      }
+  72          
+  73          void initialisation(void){
+  74   1        //Devalidation du WatchDog
+  75   1        Reg = 0xDE;
+  76   1        Reg = 0xAD;
+  77   1        
+  78   1        //Crossbar!
+  79   1        XBR2 |= 0x40;// Enable crossbar
+  80   1        XBR1 |=0x80; // Enable SYSCLK
+  81   1        XBR0 |= 0x04;// TX routed P0.0 , RX routed P0.1;
+  82   1      
+  83   1        //Gestion des sorties
+  84   1        P0MDOUT |=0x01; //Port 0.0 Push pull
+  85   1        P0MDOUT |=0x04; //Port 0.2 Push pull
+  86   1        P1MDOUT |=0x40; //Port 1.6 Push Pull  
+  87   1        
+  88   1        //Interrupt
+  89   1        EA=1; //Enable all interrupt
+  90   1        EIE2 |= 0x04; // Enable interrupt 16 (Timer 4)
+  91   1        EIE2 |= 0x20; // Enable interrupt 19 (Bouton 3.7)
+  92   1        ES0 = 1; // Enable interrupt 4 (UART0)
+  93   1      
+  94   1        //Appel fonctions de configuration
+  95   1        config_clock();
+  96   1        config_timer4();
+  97   1        config_timer1();
+  98   1        config_UART();
+  99   1        //definition_param_test();
+ 100   1        return;
+ 101   1      }
+ 102          
+ 103          void config_clock(void){
+ 104   1        unsigned int n;
+ 105   1        OSCXCN = 0x67;// Config Extern Oscil
+ 106   1        for(n=0;n<2;n++){
+ 107   2          delay();
+ 108   2        }
+ 109   1        OSCICN |= 0x08; //Enable Extern Clock
+ 110   1        return;
+ 111   1      }
+ 112          
+ 113          void config_timer4(void){
+ 114   1        T4CON |= 0x02; //Configuration Timer 4
+ 115   1        T4CON &= 0xFD; //Incremente par la clock
+ 116   1        RCAP4L = 0xFF; //LB rechargement
+ 117   1        RCAP4H = 0xEF; //HB rechargement
+C51 COMPILER V9.52.0.0   FCT_08B                                                           03/19/2019 16:32:48 PAGE 3   
+
+ 118   1        CKCON |= 0x40; //Timer 4 uses system clock
+ 119   1        T4CON &=0x7F; //Flag = 0
+ 120   1        return;
+ 121   1      }
+ 122          
+ 123          void config_timer1(void){
+ 124   1         CKCON |= 0x10;  // On ne divise pas par 12
+ 125   1         TH1 = 0xB8; // 184 debut timer1 --> 19200 baudrate
+ 126   1         TMOD &= 0xaf; // T1M1
+ 127   1         TMOD |= 0x20; //T1M0
+ 128   1         TR1 = 1; // enable timer 1
+ 129   1      }
+ 130          
+ 131          void config_UART(void){      //19200
+ 132   1        SM00 = 0; // UART0 mode 1    
+ 133   1        SM10 = 1;    // UART0 mode 1    
+ 134   1        PCON |= 0x80; // baud rate divided by 2 disabled                    
+ 135   1        REN0 = 1; // receive enable
+ 136   1        RI0 = 0; // RECEIVE INTERRUPT FLAG
+ 137   1      }
+ 138          
+ 139          
+ 140          //void definition_param_test(void){
+ 141          //  intensite = 90;
+ 142          //  duree_allum = 20;
+ 143          //  duree_ext = 10;
+ 144          //  nb_allumage = 4;
+ 145          //  return;
+ 146          //}
+ 147          
+ 148          void delay (void){
+ 149   1        unsigned int k;
+ 150   1        for(k=0;k<3000;k++){
+ 151   2        }
+ 152   1        return;
+ 153   1      }
+ 154          
+ 155          void cycle(unsigned int intensite_cycle , unsigned int t_duree_allum , unsigned int t_duree_ext , unsigned
+             - int nb_allumage_cycle){
+ 156   1        if(compteur_cycle<=nb_allumage_cycle-1){
+ 157   2          if(led_on<=t_duree_allum*500){
+ 158   3            led_on++;
+ 159   3            allumage(intensite_cycle);
+ 160   3          }
+ 161   2          else{
+ 162   3            if(led_off<=t_duree_ext*500){
+ 163   4              led_off++;
+ 164   4              CDE=0;
+ 165   4            }
+ 166   3            else{
+ 167   4              led_on=0;
+ 168   4              led_off=0;
+ 169   4              compteur_cycle++;
+ 170   4            } 
+ 171   3          }
+ 172   2        }
+ 173   1        else {
+ 174   2          T4CON &= 0xFB;
+ 175   2          }
+ 176   1      }
+ 177          
+ 178          void allumage(unsigned int rapport_cyclique){
+C51 COMPILER V9.52.0.0   FCT_08B                                                           03/19/2019 16:32:48 PAGE 4   
+
+ 179   1        if(cycle_haut*20<rapport_cyclique){
+ 180   2          cycle_haut++;
+ 181   2          CDE=1;
+ 182   2          cycle_bas=cycle_haut;
+ 183   2        }
+ 184   1        else{
+ 185   2          if(cycle_bas*20<100){
+ 186   3            CDE=0;
+ 187   3            cycle_bas++;
+ 188   3          }
+ 189   2          else{
+ 190   3            cycle_haut=0;
+ 191   3            cycle_bas=0;
+ 192   3          }
+ 193   2        }
+ 194   1      }
+ 195          
+ 196          //Fonctions d'interruption
+ 197          
+ 198          // interruption timer 4 overflow
+ 199          //void timer_interrupt() interrupt 16{
+ 200          //    //cycle(intensite,duree_allum , duree_ext , nb_allumage);
+ 201          //    cycle(I,D,E,N);
+ 202          //    T4CON &=0x7F; // On baisse la flag a la fin de l'allumage
+ 203          //}
+ 204          
+ 205          //interruption manuelle on force la LED a 0
+ 206          // interrupt 19 pour le test, si falling edge sur le bouton P3.7
+ 207          void super_extinction(void) interrupt 19 {
+ 208   1        CDE=0;
+ 209   1        T4CON &= 0xFB; //On coupe le timer
+ 210   1      }
+ 211          
+ 212          
+ 213          //interruption 4 (reception caractere)
+ 214          void interrupt_reception(void) interrupt 4 {
+ 215   1          int value = conversion_ASCII_UINT(SBUF0);
+ 216   1          if (RI0 == 1){// caractere recu
+ 217   2              RI0=0;// RECEIVE INTERRUPT FLAG CLEARED    
+ 218   2            
+ 219   2      // premier carctere                    
+ 220   2              if (SBUF0 == 0x49){ // si je reçois "I" de PUTTY (0x49) ;  
+ 221   3                I = -1; // permet d'avoir une condition pour rentrer dans la boucle pour les valeurs de I saisies par
+             - la suite
+ 222   3              }
+ 223   2              else if (SBUF0 == 0x44){ // si je reçois "D" de PUTTY
+ 224   3                D = -1;
+ 225   3              }
+ 226   2              else if (SBUF0 == 0x45){ // si je reçois "E" de PUTTY{  
+ 227   3                E = -1;
+ 228   3              }
+ 229   2              else if (SBUF0 == 0x4E){ // si je reçois "N" de PUTTY 
+ 230   3                N = -1;
+ 231   3              }              
+ 232   2      //      ========================DEUXIEME CARACTERE DU PARAMETRE======================================     
+             -             
+ 233   2              
+ 234   2              else if ((value != -1) && (I == -1)){ // quand je reçois la valeur de "I" de PUTTY
+ 235   3                I = value;
+ 236   3              } 
+ 237   2              else if ((value != -1) && (D == -1)){ // quand je reçois la valeur de "D" de PUTTY
+ 238   3                D = value;
+C51 COMPILER V9.52.0.0   FCT_08B                                                           03/19/2019 16:32:48 PAGE 5   
+
+ 239   3              }  
+ 240   2              else if ((value != -1) && (E == -1)){ // quand je reçois la valeur de "E" de PUTTY
+ 241   3                E = value; 
+ 242   3              }
+ 243   2              else if ((value != -1) && (N == -1)){ // quand je reçois la valeur de "N" de PUTTY  
+ 244   3                N = value;
+ 245   3              }
+ 246   2      //========================DERNIER CARACTERE======================================           
+ 247   2              else if (SBUF0 == 0x21){ // quand je reçois le "!" pour lancer la séquence
+ 248   3                GO = 1;
+ 249   3              }                                                         
+ 250   2      //========================CARACTERE D'ERREUR======================================        
+ 251   2              else{
+ 252   3                SBUF0 = 0x23; // Envoi caractère # pour signifier que le caractère n'est pas recevable.
+ 253   3              }
+ 254   2          }
+ 255   1          else{ // Trans
+ 256   2                TI0 = 0;
+ 257   2          }
+ 258   1          value = -1;
+ 259   1      }
+ 260          
+ 261          int conversion_ASCII_UINT(char SBUF0){
+ 262   1        switch(SBUF0){
+ 263   2           case '0':
+ 264   2               return 0;
+ 265   2               break;
+ 266   2           case '1':
+ 267   2               return 1;
+ 268   2               break;         
+ 269   2      
+ 270   2           case '2':
+ 271   2               return 2;
+ 272   2               break;
+ 273   2      
+ 274   2           case '3':
+ 275   2               return 3;
+ 276   2               break;
+ 277   2           case '4':
+ 278   2               return 4;
+ 279   2               break;
+ 280   2           case '5':
+ 281   2               return 5;
+ 282   2               break;
+ 283   2           case '6':
+ 284   2               return 6;
+ 285   2               break;
+ 286   2           case '7':
+ 287   2               return 7;
+ 288   2               break;
+ 289   2           case '8':
+ 290   2               return 8;
+ 291   2               break;
+ 292   2           case '9':
+ 293   2               return 9;
+ 294   2               break;
+ 295   2           default:
+ 296   2               return -1;
+ 297   2        }
+ 298   1      }
+
+
+C51 COMPILER V9.52.0.0   FCT_08B                                                           03/19/2019 16:32:48 PAGE 6   
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    725    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     20      10
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

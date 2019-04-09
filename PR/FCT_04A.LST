@@ -1,0 +1,161 @@
+C51 COMPILER V9.52.0.0   FCT_04A                                                           04/02/2019 16:22:56 PAGE 1   
+
+
+C51 COMPILER V9.52.0.0, COMPILATION OF MODULE FCT_04A
+OBJECT MODULE PLACED IN FCT_04A.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE FCT_04A.c OPTIMIZE(0,SPEED) BROWSE DEBUG OBJECTEXTEND TABS(2)
+
+line level    source
+
+   1          #include "FCT_04A.h"
+   2          
+   3          
+   4          bit TI0_flag,ok;
+   5          sfr Reg    =   0xFF; 
+   6          
+   7          
+   8          void initialisation(void){
+   9   1        //Devalidation du WatchDog
+  10   1        Reg = 0xDE;
+  11   1        Reg = 0xAD;
+  12   1        
+  13   1        //Crossbar!
+  14   1        XBR2 |= 0x40;// Enable crossbar
+  15   1        XBR1 |=0x80; // Enable SYSCLK
+  16   1        XBR0 |= 0x04;// TX routed P0.0 , RX routed P0.1;
+  17   1      
+  18   1        //Gestion des sorties
+  19   1        P0MDOUT |=0x01; //Port 0.0 Push pull
+  20   1        P0MDOUT |=0x04; //Port 0.2 Push pull
+  21   1        P1MDOUT |=0x40; //Port 1.6 Push Pull  
+  22   1        
+  23   1        //Interrupt
+  24   1        EA=1; //Enable all interrupt
+  25   1        EIE2 |= 0x20; // Enable interrupt 19 (Bouton 3.7)
+  26   1        ES0 = 1; // Enable interrupt 4 (UART0)
+  27   1      
+  28   1        //Appel fonctions de configuration
+  29   1        config_clock();
+  30   1        config_timer1();
+  31   1        config_UART();
+  32   1        //definition_param_test();
+  33   1        return;
+  34   1      }
+  35          //
+  36          
+  37          void delay (void){
+  38   1        unsigned int k;
+  39   1        for(k=0;k<3000;k++){
+  40   2        }
+  41   1        return;
+  42   1      }
+  43          void wait(int time){
+  44   1        unsigned int k,j;
+  45   1        for(k=0;k<3000;k++){
+  46   2          for(j=0;j<time;j++){
+  47   3          }
+  48   2        }
+  49   1        return;
+  50   1      }
+  51          
+  52          void config_clock(void){
+  53   1        unsigned int n;
+  54   1        OSCXCN = 0x67;// Config Extern Oscil
+  55   1        for(n=0;n<2;n++){
+C51 COMPILER V9.52.0.0   FCT_04A                                                           04/02/2019 16:22:56 PAGE 2   
+
+  56   2          delay();
+  57   2        }
+  58   1        OSCICN |= 0x08; //Enable Extern Clock
+  59   1        return;
+  60   1      }
+  61          
+  62          void config_timer1(void){
+  63   1         CKCON |= 0x10;  // On ne divise pas par 12
+  64   1         TH1 = 0xB8; // 184 debut timer1 --> 19200 baudrate
+  65   1         TMOD &= 0xaf; // T1M1
+  66   1         TMOD |= 0x20; //T1M0
+  67   1         TR1 = 1; // enable timer 1
+  68   1      }
+  69          
+  70          void config_UART(void){      //19200
+  71   1        SM00 = 0; // UART0 mode 1    
+  72   1        SM10 = 1;    // UART0 mode 1    
+  73   1        PCON |= 0x80; // baud rate divided by 2 disabled                    
+  74   1        REN0 = 1; // receive enable
+  75   1        RI0 = 0; // RECEIVE INTERRUPT FLAG
+  76   1      }
+  77          
+  78          void arriver(void){
+  79   1        SBUF0='A';
+  80   1        delay();
+  81   1        SBUF0='S';
+  82   1        delay();
+  83   1        SBUF0=' ';
+  84   1        delay();
+  85   1        SBUF0='H';
+  86   1      }
+  87          void compare(void){
+  88   1        unsigned char xdata c2[8] = "CS H A:";
+  89   1        unsigned char xdata subBuffer[8];
+  90   1        char xdata subBufferNum[3];
+  91   1        memcpy(subBuffer,&Buffer,7);
+*** WARNING C206 IN LINE 91 OF FCT_04A.c: 'memcpy': missing function-prototype
+*** ERROR C267 IN LINE 91 OF FCT_04A.c: 'memcpy': requires ANSI-style prototype
+  92   1        subBuffer[7]='\0';
+  93   1        memcpy(subBufferNum,&Buffer[7],3);
+  94   1        if ((strcmp(Buffer,c1))==0){
+  95   2          
+  96   2        }//do something}
+  97   1        else if(strcmp(subBuffer,c2)==0){
+  98   2          float timetomove = CDE_Servo_H(subBufferNum);
+  99   2          temps =150.0*timetomove;
+ 100   2          running=1;
+ 101   2        }
+ 102   1        else{ SBUF0='#';}
+ 103   1        memset(Buffer, 0, sizeof(Buffer));
+ 104   1      }
+ 105              
+ 106              
+ 107          void serial0() interrupt 4{
+ 108   1          unsigned char ch;
+ 109   1          if(RI0){
+ 110   2            ch=SBUF0;
+ 111   2            if(ch!=0x0D){
+ 112   3              Buffer[index++]=ch;
+ 113   3            }
+ 114   2            else{
+ 115   3              compare();
+C51 COMPILER V9.52.0.0   FCT_04A                                                           04/02/2019 16:22:56 PAGE 3   
+
+ 116   3            ok=1;
+ 117   3            }
+ 118   2            RI0=0;
+ 119   2          }
+ 120   1          else{
+ 121   2            TI0=0;
+ 122   2            TI0_flag=1;
+ 123   2          }
+ 124   1      }
+ 125          
+ 126          void main(void){
+ 127   1        initialisation();
+ 128   1        init_FO_M3();
+ 129   1        index=0;
+ 130   1        TI0_flag=0;
+ 131   1        ok=0;
+ 132   1        temps = CDE_Servo_H("-00");
+ 133   1        while(1){
+ 134   2          if(ok==1){
+ 135   3            ok=0;
+ 136   3            index=0;
+ 137   3            if (running==1){
+ 138   4              wait(temps);
+ 139   4              arriver();
+ 140   4              running=0;
+ 141   4            }
+ 142   3          }
+ 143   2        }
+ 144   1      }
+
+C51 COMPILATION COMPLETE.  1 WARNING(S),  1 ERROR(S)
